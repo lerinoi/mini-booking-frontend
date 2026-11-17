@@ -70,7 +70,7 @@ export function useBookings() {
     if (uncertainSlotId !== null) {
       if (!await loadSlots()) throw new ApiError('Результат бронирования неизвестен. Сначала восстановите связь и обновите расписание.')
       const previous = slots.value.find(slot => slot.id === uncertainSlotId)
-      if (previous && (previous.status !== 'available' || Date.parse(previous.starts_at) <= Date.now())) {
+      if (payload.slot_id === uncertainSlotId && previous && (previous.status !== 'available' || Date.parse(previous.starts_at) <= Date.now())) {
         uncertainSlotId = null
         throw new ApiError('Слот уже недоступен. Проверьте обновлённое расписание.', 409)
       }

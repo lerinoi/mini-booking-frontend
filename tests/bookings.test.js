@@ -75,3 +75,13 @@ test('500 and failed refresh block retry until reconciliation succeeds', async (
   await assert.rejects(api.createBooking(payload), /Результат бронирования неизвестен/)
   assert.equal(calls.filter(c => c[1] === 'POST').length, 1)
 })
+
+test('reconciling a previous uncertain slot does not block a different slot', async () => {
+  const booked = { ...future, status: 'booked' }
+  const other = { ...future, id: 2 }
+  const calls = mock([new TypeError('network'), new TypeError('network'), [200, [booked, other]], [201, { id: 4 }]])
+  const api = useBookings()
+  await assert.rejects(api.createBooking(payload))
+  assert.equal((await api.createBooking({ ...payload, slot_id: 2 })).id, 4)
+  assert.deepEqual(calls.map(c => c[1]), ['POST', 'GET', 'GET', 'POST'])
+})
