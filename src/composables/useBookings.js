@@ -23,5 +23,9 @@ export function useBookings() {
     if (response.status !== 201) throw Object.assign(new Error('Не удалось забронировать слот.'), { status: response.status, errors: data.errors })
     return data
   }
-  return { slots, loading, loadError, loadSlots, createBooking }
+  async function cancelBooking(id) {
+    const response = await fetch(`/api/bookings/${id}`, { method: 'DELETE', headers: { Accept: 'application/json' } })
+    if (response.status !== 204) throw Object.assign(new Error('Не удалось отменить бронирование.'), { status: response.status })
+  }
+  return { slots, loading, loadError, loadSlots, createBooking, cancelBooking }
 }

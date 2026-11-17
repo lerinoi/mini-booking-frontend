@@ -4,6 +4,8 @@ import Button from 'primevue/button'
 import Select from 'primevue/select'
 import Tag from 'primevue/tag'
 import Message from 'primevue/message'
+import ConfirmDialog from 'primevue/confirmdialog'
+import { useConfirm } from 'primevue/useconfirm'
 import Toast from 'primevue/toast'
 import { useToast } from 'primevue/usetoast'
 import BookingDialog from './components/BookingDialog.vue'
@@ -11,8 +13,32 @@ import ProgressSpinner from 'primevue/progressspinner'
 import { useBookings } from './composables/useBookings'
 import { dateKey, formatDate, slotStatus } from './schedule'
 
-const { slots, loading, loadError, loadSlots, createBooking } = useBookings()
+const { slots, loading, loadError, loadSlots, createBooking, cancelBooking } = useBookings()
 const toast = useToast()
+const confirm = useConfirm()
+const cancelling = ref(null)
+const cancelError = ref('')
+function confirmCancellation(slot) {
+  confirm.require({
+    header: 'Отменить бронирование?',
+    message: `${formatDate(slot.starts_at, slot.timezone, { day: 'numeric', month: 'long' })}, ${time(slot)}. Бронирование будет отменено.`,
+    icon: 'pi pi-exclamation-circle',
+    rejectLabel: 'Оставить', acceptLabel: 'Да, отменить',
+    rejectProps: { severity: 'secondary', outlined: true },
+    acceptProps: { severity: 'danger' },
+    accept: () => performCancellation(slot),
+  })
+}
+async function performCancellation(slot) {
+  if (cancelling.value !== null) return
+  cancelling.value = slot.active_booking_id; cancelError.value = ''
+  try {
+    await cancelBooking(slot.active_booking_id)
+    toast.add({ severity: 'success', summary: 'Бронирование отменено', detail: 'Расписание обновлено.', life: 5000 })
+    await loadSlots()
+  } catch (error) { cancelError.value = error.message }
+  finally { cancelling.value = null }
+}
 const selectedSlot = ref(null)
 const submitting = ref(false)
 const formErrors = ref({})
@@ -52,7 +78,7 @@ onUnmounted(() => clearInterval(clock))
 </script>
 
 <template>
-  <Toast /><BookingDialog :slot="selectedSlot" :busy="submitting" :errors="formErrors" :error="formError" @close="selectedSlot = null" @submit="submitBooking" />
+  <Toast /><ConfirmDialog class="confirm-dialog" /><BookingDialog :slot="selectedSlot" :busy="submitting" :errors="formErrors" :error="formError" @close="selectedSlot = null" @submit="submitBooking" />
   <main class="booking-page">
     <header class="page-header">
       <div class="brand"><i class="pi pi-building" aria-hidden="true"></i> MINI BOOKING</div>
@@ -66,6 +92,7 @@ onUnmounted(() => clearInterval(clock))
         <div class="date-filter"><label for="schedule-date">Дата встречи</label><Select input-id="schedule-date" v-model="selectedDate" :options="dates" option-label="label" option-value="value" :disabled="loading" placeholder="Выберите дату" /></div>
         <Button icon="pi pi-refresh" aria-label="Обновить расписание" severity="secondary" outlined :disabled="loading" @click="loadSlots" />
       </div>
+      <Message v-if="cancelError" severity="error" :closable="false">{{ cancelError }}</Message>
       <Message v-if="loadError" severity="error" :closable="false">{{ loadError }} <Button label="Повторить" text :disabled="loading" @click="loadSlots" /></Message>
       <div v-if="loading && !slots.length" class="empty-state" role="status"><ProgressSpinner aria-label="Загрузка расписания" /><p>Загружаем расписание…</p></div>
       <div v-else-if="!slots.length && !loadError" class="empty-state">Расписание пока не опубликовано.</div>
@@ -73,7 +100,8 @@ onUnmounted(() => clearInterval(clock))
         <article v-for="slot in daySlots" :key="slot.id" class="slot-card" :class="status(slot)">
           <div class="slot-top"><i class="pi pi-clock" aria-hidden="true"></i><Tag :value="statusLabels[status(slot)]" :severity="severity[status(slot)]" /></div>
           <h3>{{ time(slot) }}</h3><p>Переговорная комната · 1 час</p>
-          <Button v-if="status(slot) === 'available'" label="Забронировать" icon="pi pi-plus" :disabled="loading || submitting" @click="openBooking(slot)" />
+          <Button v-if="status(slot) === 'available'" label="Забронировать" icon="pi pi-plus" :disabled="loading || submitting || cancelling !== null" @click="openBooking(slot)" />
+          <Button v-else-if="slot.active_booking_id" label="Отменить бронирование" severity="secondary" outlined :loading="cancelling === slot.active_booking_id" :disabled="loading || submitting || cancelling !== null" @click="confirmCancellation(slot)" />
           <span v-else class="slot-note">{{ status(slot) === 'past' ? 'Время встречи прошло' : 'Это время уже забронировано' }}</span>
         </article>
       </div>
