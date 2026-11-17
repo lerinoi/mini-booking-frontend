@@ -17,5 +17,11 @@ export function useBookings() {
       return false
     } finally { loading.value = false }
   }
-  return { slots, loading, loadError, loadSlots }
+  async function createBooking(payload) {
+    const response = await fetch('/api/bookings', { method: 'POST', headers: { Accept: 'application/json', 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
+    const data = await response.json()
+    if (response.status !== 201) throw Object.assign(new Error('Не удалось забронировать слот.'), { status: response.status, errors: data.errors })
+    return data
+  }
+  return { slots, loading, loadError, loadSlots, createBooking }
 }

@@ -4,11 +4,34 @@ import Button from 'primevue/button'
 import Select from 'primevue/select'
 import Tag from 'primevue/tag'
 import Message from 'primevue/message'
+import Toast from 'primevue/toast'
+import { useToast } from 'primevue/usetoast'
+import BookingDialog from './components/BookingDialog.vue'
 import ProgressSpinner from 'primevue/progressspinner'
 import { useBookings } from './composables/useBookings'
 import { dateKey, formatDate, slotStatus } from './schedule'
 
-const { slots, loading, loadError, loadSlots } = useBookings()
+const { slots, loading, loadError, loadSlots, createBooking } = useBookings()
+const toast = useToast()
+const selectedSlot = ref(null)
+const submitting = ref(false)
+const formErrors = ref({})
+const formError = ref('')
+function openBooking(slot) {
+  selectedSlot.value = slot; formErrors.value = {}; formError.value = ''
+}
+async function submitBooking(payload) {
+  if (submitting.value) return
+  submitting.value = true; formErrors.value = {}; formError.value = ''
+  try {
+    await createBooking(payload)
+    selectedSlot.value = null
+    toast.add({ severity: 'success', summary: 'Встреча запланирована', detail: 'Переговорная забронирована.', life: 5000 })
+    await loadSlots()
+  } catch (error) {
+    formErrors.value = error.errors ?? {}; formError.value = error.message
+  } finally { submitting.value = false }
+}
 const selectedDate = ref(null)
 const now = ref(Date.now())
 let clock
@@ -29,6 +52,7 @@ onUnmounted(() => clearInterval(clock))
 </script>
 
 <template>
+  <Toast /><BookingDialog :slot="selectedSlot" :busy="submitting" :errors="formErrors" :error="formError" @close="selectedSlot = null" @submit="submitBooking" />
   <main class="booking-page">
     <header class="page-header">
       <div class="brand"><i class="pi pi-building" aria-hidden="true"></i> MINI BOOKING</div>
@@ -49,7 +73,7 @@ onUnmounted(() => clearInterval(clock))
         <article v-for="slot in daySlots" :key="slot.id" class="slot-card" :class="status(slot)">
           <div class="slot-top"><i class="pi pi-clock" aria-hidden="true"></i><Tag :value="statusLabels[status(slot)]" :severity="severity[status(slot)]" /></div>
           <h3>{{ time(slot) }}</h3><p>Переговорная комната · 1 час</p>
-          <Button v-if="status(slot) === 'available'" label="Забронировать" icon="pi pi-plus" :disabled="loading" />
+          <Button v-if="status(slot) === 'available'" label="Забронировать" icon="pi pi-plus" :disabled="loading || submitting" @click="openBooking(slot)" />
           <span v-else class="slot-note">{{ status(slot) === 'past' ? 'Время встречи прошло' : 'Это время уже забронировано' }}</span>
         </article>
       </div>
