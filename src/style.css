@@ -32,3 +32,21 @@ footer { padding: 24px 0; text-align: center; font-size: 12px; color: #617580; }
 .form-field { display: grid; gap: 8px; margin: 20px 0; }
 .field-error { color: #b42318; }
 .dialog-actions { display: flex; justify-content: flex-end; gap: 12px; margin-top: 28px; }
+
+.confirm-dialog { width: min(460px, calc(100vw - 32px)); }
+.p-dialog-content, .p-dialog-header { overflow-wrap: anywhere; }
+.slot-card.available { border-top: 3px solid #36a28e; }
+.slot-card.booked { border-top: 3px solid #d9a43b; }
+.slot-card.past { border-top: 3px solid #b8c6cc; }
+.slot-card .p-button { margin-top: auto; font-size: 13px; min-height: 44px; }
+.p-message { margin-bottom: 16px; }
+.p-toast { max-width: calc(100vw - 32px); }
+.p-button:focus-visible, .p-select:focus-visible { outline: 3px solid #86c7be; outline-offset: 3px; }
+@media (max-width: 540px) {
+  .p-toast { right: 16px !important; }
+  .dialog-actions { flex-direction: column-reverse; }
+  .dialog-actions .p-button { width: 100%; min-height: 44px; }
+  .selected-meeting { padding: 12px; }
+  .p-dialog-header { gap: 8px; }
+  .p-dialog-title { font-size: 20px; }
+}

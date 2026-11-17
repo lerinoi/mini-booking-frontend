@@ -1,14 +1,14 @@
 <script setup>
-import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+import { defineAsyncComponent, computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import Button from 'primevue/button'
 import Select from 'primevue/select'
 import Tag from 'primevue/tag'
 import Message from 'primevue/message'
-import ConfirmDialog from 'primevue/confirmdialog'
+const ConfirmDialog = defineAsyncComponent(() => import('primevue/confirmdialog'))
 import { useConfirm } from 'primevue/useconfirm'
 import Toast from 'primevue/toast'
 import { useToast } from 'primevue/usetoast'
-import BookingDialog from './components/BookingDialog.vue'
+const BookingDialog = defineAsyncComponent(() => import('./components/BookingDialog.vue'))
 import ProgressSpinner from 'primevue/progressspinner'
 import { useBookings } from './composables/useBookings'
 import { dateKey, formatDate, slotStatus } from './schedule'
