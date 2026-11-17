@@ -18,6 +18,7 @@ const toast = useToast()
 const confirm = useConfirm()
 const cancelling = ref(null)
 const cancelError = ref('')
+const failedCancellation = ref(null)
 function confirmCancellation(slot) {
   confirm.require({
     header: 'Отменить бронирование?',
@@ -31,12 +32,15 @@ function confirmCancellation(slot) {
 }
 async function performCancellation(slot) {
   if (cancelling.value !== null) return
-  cancelling.value = slot.active_booking_id; cancelError.value = ''
+  cancelling.value = slot.active_booking_id; cancelError.value = ''; failedCancellation.value = null
   try {
     await cancelBooking(slot.active_booking_id)
     toast.add({ severity: 'success', summary: 'Бронирование отменено', detail: 'Расписание обновлено.', life: 5000 })
     await loadSlots()
-  } catch (error) { cancelError.value = error.message }
+  } catch (error) {
+    cancelError.value = error.message
+    if (error.status !== 404) failedCancellation.value = slot
+  }
   finally { cancelling.value = null }
 }
 const selectedSlot = ref(null)
@@ -56,8 +60,13 @@ async function submitBooking(payload) {
     await loadSlots()
   } catch (error) {
     formErrors.value = error.errors ?? {}; formError.value = error.message
+    if (error.status === 409) {
+      selectedSlot.value = null
+      toast.add({ severity: 'warn', summary: 'Слот недоступен', detail: error.message, life: 8000 })
+    }
   } finally { submitting.value = false }
 }
+const busy = computed(() => loading.value || submitting.value || cancelling.value !== null)
 const selectedDate = ref(null)
 const now = ref(Date.now())
 let clock
@@ -73,12 +82,15 @@ const statusLabels = { available: 'Свободен', booked: 'Занят', past
 const severity = { available: 'success', booked: 'warn', past: 'secondary' }
 const status = slot => slotStatus(slot, now.value)
 const time = slot => `${formatDate(slot.starts_at, slot.timezone, { hour: '2-digit', minute: '2-digit' })} — ${formatDate(slot.ends_at, slot.timezone, { hour: '2-digit', minute: '2-digit' })}`
+watch(selectedSlot, slot => {
+  if (slot && status(slot) !== 'available') selectedSlot.value = null
+})
 onMounted(() => { loadSlots(); clock = setInterval(() => { now.value = Date.now() }, 1000) })
 onUnmounted(() => clearInterval(clock))
 </script>
 
 <template>
-  <Toast /><ConfirmDialog class="confirm-dialog" /><BookingDialog :slot="selectedSlot" :busy="submitting" :errors="formErrors" :error="formError" @close="selectedSlot = null" @submit="submitBooking" />
+  <Toast /><ConfirmDialog class="confirm-dialog" /><BookingDialog :slot="selectedSlot" :busy="submitting || loading" :errors="formErrors" :error="formError" @close="selectedSlot = null" @submit="submitBooking" />
   <main class="booking-page">
     <header class="page-header">
       <div class="brand"><i class="pi pi-building" aria-hidden="true"></i> MINI BOOKING</div>
@@ -89,19 +101,19 @@ onUnmounted(() => clearInterval(clock))
     <section class="schedule-panel" aria-labelledby="schedule-heading" :aria-busy="loading">
       <div class="toolbar">
         <div><h2 id="schedule-heading">Расписание</h2><p>Часовые слоты · выходные включены</p></div>
-        <div class="date-filter"><label for="schedule-date">Дата встречи</label><Select input-id="schedule-date" v-model="selectedDate" :options="dates" option-label="label" option-value="value" :disabled="loading" placeholder="Выберите дату" /></div>
-        <Button icon="pi pi-refresh" aria-label="Обновить расписание" severity="secondary" outlined :disabled="loading" @click="loadSlots" />
+        <div class="date-filter"><label for="schedule-date">Дата встречи</label><Select input-id="schedule-date" v-model="selectedDate" :options="dates" option-label="label" option-value="value" :disabled="busy" placeholder="Выберите дату" /></div>
+        <Button icon="pi pi-refresh" aria-label="Обновить расписание" severity="secondary" outlined :disabled="busy" @click="loadSlots" />
       </div>
-      <Message v-if="cancelError" severity="error" :closable="false">{{ cancelError }}</Message>
-      <Message v-if="loadError" severity="error" :closable="false">{{ loadError }} <Button label="Повторить" text :disabled="loading" @click="loadSlots" /></Message>
+      <Message v-if="cancelError" severity="error" :closable="false">{{ cancelError }} <Button v-if="failedCancellation" label="Повторить отмену" text :disabled="busy" @click="confirmCancellation(failedCancellation)" /></Message>
+      <Message v-if="loadError" severity="error" :closable="false">{{ loadError }} <Button label="Повторить" text :disabled="busy" @click="loadSlots" /></Message>
       <div v-if="loading && !slots.length" class="empty-state" role="status"><ProgressSpinner aria-label="Загрузка расписания" /><p>Загружаем расписание…</p></div>
       <div v-else-if="!slots.length && !loadError" class="empty-state">Расписание пока не опубликовано.</div>
       <div class="slot-grid">
         <article v-for="slot in daySlots" :key="slot.id" class="slot-card" :class="status(slot)">
           <div class="slot-top"><i class="pi pi-clock" aria-hidden="true"></i><Tag :value="statusLabels[status(slot)]" :severity="severity[status(slot)]" /></div>
           <h3>{{ time(slot) }}</h3><p>Переговорная комната · 1 час</p>
-          <Button v-if="status(slot) === 'available'" label="Забронировать" icon="pi pi-plus" :disabled="loading || submitting || cancelling !== null" @click="openBooking(slot)" />
-          <Button v-else-if="slot.active_booking_id" label="Отменить бронирование" severity="secondary" outlined :loading="cancelling === slot.active_booking_id" :disabled="loading || submitting || cancelling !== null" @click="confirmCancellation(slot)" />
+          <Button v-if="status(slot) === 'available'" label="Забронировать" icon="pi pi-plus" :disabled="busy || !!loadError" @click="openBooking(slot)" />
+          <Button v-else-if="slot.active_booking_id" label="Отменить бронирование" severity="secondary" outlined :loading="cancelling === slot.active_booking_id" :disabled="busy || !!loadError" @click="confirmCancellation(slot)" />
           <span v-else class="slot-note">{{ status(slot) === 'past' ? 'Время встречи прошло' : 'Это время уже забронировано' }}</span>
         </article>
       </div>
